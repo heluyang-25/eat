@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebAR 粒子互动系统</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1647430576/handtracking.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <script>
+        let scene, camera, renderer, particleSystem;
+        let handModel, handGesture, handDetector;
+        let particles = [];
+        let lastTime = 0;
+
+        // 粒子类
+        class Particle {
+            constructor(x, y, z) {
+                this.position = new THREE.Vector3(x, y, z);
+                this.velocity = new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2);
+                this.acceleration = new THREE.Vector3(0, -0.1, 0); // Gravity effect
+                this.lifetime = 100; // Frame count before disappearing
+            }
+
+            update() {
+                this.velocity.add(this.acceleration);
+                this.position.add(this.velocity);
+                this.lifetime--;
+            }
+
+            isAlive() {
+                return this.lifetime > 0;
+            }
+        }
+
+        // 初始化
+        function init() {
+            // 创建场景
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // 创建粒子系统
+            let geometry = new THREE.BufferGeometry();
+            let vertices = [];
+            for (let i = 0; i < 16000; i++) {
+                let particle = new Particle(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1);
+                particles.push(particle);
+                vertices.push(particle.position.x, particle.position.y, particle.position.z);
+            }
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+
+            let material = new THREE.PointsMaterial({ color: 0x00FFFF, size: 0.1 });
+            particleSystem = new THREE.Points(geometry, material);
+            scene.add(particleSystem);
+
+            camera.position.z = 5;
+
+            // 物理模拟
+            animateParticles();
+
+            // 手势识别初始化
+            initHandTracking();
+        }
+
+        // 动画循环
+        function animateParticles() {
+            let now = Date.now();
+            let deltaTime = (now - lastTime) / 1000;
+            lastTime = now;
+
+            particles.forEach(particle => {
+                if (particle.isAlive()) {
+                    particle.update();
+                }
+            });
+
+            let positions = [];
+            particles.forEach(particle => {
+                if (particle.isAlive()) {
+                    positions.push(particle.position.x, particle.position.y, particle.position.z);
+                }
+            });
+            particleSystem.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(animateParticles);
+        }
+
+        // 初始化手势追踪
+        function initHandTracking() {
+            handDetector = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1647430576/${file}`
+            });
+
+            handDetector.onResults(onHandResults);
+
+            const cameraElement = document.createElement('video');
+            cameraElement.style.display = 'none';
+            document.body.appendChild(cameraElement);
+            
+            const video = document.createElement('video');
+            video.width = 640;
+            video.height = 480;
+
+            video.addEventListener('loadeddata', () => {
+                video.play();
+                detectHands(video);
+            });
+
+            navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user' }
+            }).then(stream => {
+                video.srcObject = stream;
+            });
+
+            function detectHands(video) {
+                handDetector.send({ image: video });
+                requestAnimationFrame(() => detectHands(video));
+            }
+        }
+
+        // 处理手势结果
+        function onHandResults(results) {
+            if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
+
+            let landmarks = results.multiHandLandmarks[0]; // 只处理一个手
+            let thumbTip = landmarks[4];
+            let indexTip = landmarks[8];
+            let palmCenter = landmarks[0];
+
+            // 使用手势识别结果控制粒子
+            let palmSize = palmCenter.z; // 深度反馈：根据手掌的深度来调整粒子大小
+
+            // 假设用户已设定不同手势逻辑来控制粒子效果
+            let gesture = detectGesture(landmarks);
+
+            // 控制粒子根据手势变换
+            switch (gesture) {
+                case 'open':
+                    break; // 张手变球的粒子效果
+                case 'scissors':
+                    break; // 剪刀手生成文字效果
+                case 'fist':
+                    break; // 握拳变圆环
+                case 'index':
+                    break; // 食指变星
+                case 'thumb_up':
+                    break; // 竖大拇指变爱心
+            }
+        }
+
+        // 检测手势
+        function detectGesture(landmarks) {
+            // 基本的手势识别（此处可以根据不同的 landmarks 计算手势）
+            return 'open'; // 例如，简单返回张手
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        init();
+    </script>
+</body>
+</html>
